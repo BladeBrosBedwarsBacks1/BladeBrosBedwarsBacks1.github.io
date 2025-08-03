@@ -1,5 +1,50 @@
-<h1>BBBB1yt</h1>
-This is my website.
-<br><br><br><br>
-erm...
-<button onclick="window.location.href='/erm.html'">Go to erm...</button>
+<!DOCTYPE html>
+<head>
+  <style>
+    /* Container for the dropdown */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    /* The dropdown menu - hidden by default */
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #f9f9f9;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      z-index: 1;
+    }
+
+    /* Show the dropdown when hovering the button */
+    .dropdown:hover .dropdown-content {
+      display: block;
+    }
+
+    /* Dropdown items */
+    .dropdown-content a {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+    }
+
+    /* Dropdown item hover effect */
+    .dropdown-content a:hover {background-color: #f1f1f1;}
+  </style>
+</head>
+<body>
+  <h1>BBBB1yt</h1>
+  This is my website.<br><br><br><br>erm...<br>
+  <button onclick="window.location.href='/erm.html'">Go to erm...</button>
+  <div class="dropdown">
+    <button>Hover me</button>
+    <div class="dropdown-content">
+      <a href="#">Option 1</a>
+      <a href="#">Option 2</a>
+      <a href="#">Option 3</a>
+    </div>
+  </div>
+</body>
+</html>
