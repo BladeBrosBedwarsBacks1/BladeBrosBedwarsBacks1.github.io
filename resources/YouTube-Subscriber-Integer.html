@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My YouTube Channel</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; }
+        .subscriberCount { font-weight: bold; color: #ff0000; }
+    </style>
+</head>
+<body>
+    <h1>My YouTube Channel</h1>
+    <p>
+        <span>I have </span>
+        <span class="subscriberCount" id="subscriber-count-display">...</span>
+        <span> subscribers.</span>
+    </p>
+    <script>
+        // Replace with your actual Channel ID and API Key
+        const CHANNEL_ID = 'UC5LF-7cuACOQAHn19zeIv2g';
+        const API_KEY = 'AIzaSyAT38m2pvKdQVevyZdFxA2TIlC2VDTmdrY';
+
+        async function getSubscriberCount() {
+            const url = `https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${CHANNEL_ID}&key=${API_KEY}`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.items && data.items.length > 0) {
+                    const count = data.items[0].statistics.subscriberCount;
+                    document.getElementById('subscriber-count-display').textContent = count;
+                } else {
+                    document.getElementById('subscriber-count-display').textContent = 'N/A';
+                }
+            } catch (error) {
+                console.error('Error fetching subscriber count:', error);
+                document.getElementById('subscriber-count-display').textContent = 'Error';
+            }
+        }
+
+        getSubscriberCount();
+    </script>
+</body>
+</html>
