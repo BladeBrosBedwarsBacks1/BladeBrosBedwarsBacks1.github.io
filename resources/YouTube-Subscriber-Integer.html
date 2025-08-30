@@ -12,11 +12,11 @@
 
     <script>
         // Replace with your actual Replit URL
-        const REPLIT_API_URL = 'https://replit.com/@bbbb1yt/YouTube-Subscriber-Count-Component'; 
+        const API_URL = 'const APIURL = process.env['Website-to-API-URL']'; 
 
         async function getSubscriberCount() {
             try {
-                const response = await fetch(REPLIT_API_URL);
+                const response = await fetch(API_URL);
                 const data = await response.json();
                 
                 if (data.subscriberCount) {
