@@ -1,24 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Subscriber Count Blob:bladebrosbedwarsbacks1.github.io</title>
-</head>
-<body>
-    <p>
-        <span class="subscriberCount" id="subscriber-count-display">...</span>
-    </p>
-
-    <script>
-        // Replace with your actual Replit URL
-        const API_URL = 'process.env['YOUTUBE_DATA_API_KEY']'; 
-
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Subscriber Count Blob:bladebrosbedwarsbacks1.github.io</title></head><body><p><span class="subscriberCount" id="subscriber-count-display">Loading...</span></p><script>
+        const API_URL = process.env.YOUTUBE_DATA_API_URL;
         async function getSubscriberCount() {
             try {
                 const response = await fetch(API_URL);
                 const data = await response.json();
-                
                 if (data.subscriberCount) {
                     document.getElementById('subscriber-count-display').textContent = data.subscriberCount;
                 } else {
@@ -29,8 +14,5 @@
                 document.getElementById('subscriber-count-display').textContent = 'Error';
             }
         }
-        
         getSubscriberCount();
-    </script>
-</body>
-</html>
+    </script></body></html>
