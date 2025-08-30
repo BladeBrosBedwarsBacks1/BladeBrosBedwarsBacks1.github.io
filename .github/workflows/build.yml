@@ -1,0 +1,10 @@
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Project
+        run: npm run build
+        env:
+          REACT_APP_API_KEY: ${{ secrets.YOUTUBE_DATA_API_URL }} 
+      - name: Deploy to Hosting
