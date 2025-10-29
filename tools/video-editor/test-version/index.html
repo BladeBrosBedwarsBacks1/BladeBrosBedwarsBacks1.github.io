@@ -8,7 +8,7 @@
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .editor-container { display: flex; width: 100%; max-width: 1200px; margin-top: 20px; gap: 20px; }
         .media-library { width: 25%; border: 1px solid #ccc; padding: 10px; overflow-y: auto; height: 60vh; }
-        .timeline-area { width: 75%; display: flex; flex-direction: column; }
+        .timeline-area { width: 75%; display: flex; flex-direction: column; position: relative; }
         .preview-player { width: 100%; border: 1px solid #ccc; background-color: #000; }
         .timeline { border: 1px solid #ccc; margin-top: 10px; height: 30vh; overflow-x: auto; white-space: nowrap; }
         .track { border-bottom: 1px solid #ddd; padding: 5px; min-height: 50px; display: flex; align-items: center; gap: 5px; }
@@ -22,6 +22,19 @@
         .dragging { opacity: 0.5; }
         .over { border: 2px dashed #007BFF; }
         .hidden-video { display: none; }
+        .warning { color: red; margin-top: 10px; }
+        .preview-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        #playPauseBtn { font-size: 1.5em; cursor: pointer; }
+        #timelineIndicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 2px;
+            background-color: red;
+            pointer-events: none;
+            transform: translateX(0);
+        }
     </style>
 </head>
 <body>
@@ -31,6 +44,9 @@
     <div class="controls">
         <label for="mediaFiles" class="file-upload-label">Upload Media</label>
         <input type="file" id="mediaFiles" accept="video/*,image/*,audio/*" multiple>
+        <div class="preview-controls">
+            <button id="playPauseBtn">▶</button>
+        </div>
         <select id="speedControl" onchange="changeSpeed(this.value)">
             <option value="0.5">0.5x</option>
             <option value="1" selected>1x</option>
@@ -41,6 +57,10 @@
         <button onclick="saveVideo()">Save (Requires ffmpeg.wasm)</button>
     </div>
 
+    <div class="warning">
+        <p>Warning: Make sure that you put the videos in the correct order because once placed on the track, the only way to reorder it is to clear the tracks with the Clear All button.</p>
+    </div>
+
     <div class="editor-container">
         <div class="media-library">
             <h3>Media Library</h3>
@@ -49,6 +69,7 @@
         <div class="timeline-area">
             <canvas id="previewCanvas" class="preview-player"></canvas>
             <div class="timeline">
+                <div id="timelineIndicator"></div>
                 <div id="track-video-1" class="track">Video Track 1</div>
                 <div id="track-audio-1" class="track">Audio Track 1</div>
             </div>
@@ -65,10 +86,15 @@
             'audio': document.getElementById('track-audio-1'),
         };
         const timeline = document.querySelector('.timeline');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timelineIndicator = document.getElementById('timelineIndicator');
 
         const mediaFiles = new Map();
         let fileCounter = 0;
-        let previewVideoElement = null; // For previewing video frames
+        let previewVideoElement = null; // For video preview
+        let isPlaying = false;
+        let currentPlaybackTime = 0;
+        let imageDuration = 3; // 3 seconds per image clip
 
         mediaFilesInput.addEventListener('change', (event) => {
             for (const file of event.target.files) {
@@ -89,7 +115,7 @@
             const target = event.target;
             if (target.classList.contains('media-item') || target.classList.contains('clip')) {
                 event.dataTransfer.setData('text/plain', target.dataset.id);
-                event.dataTransfer.effectAllowed = target.classList.contains('media-item') ? 'copy' : 'move';
+                event.dataTransfer.effectAllowed = 'copy';
                 target.classList.add('dragging');
             }
         });
@@ -104,7 +130,7 @@
         
         timeline.addEventListener('dragover', (event) => {
             event.preventDefault();
-            const target = event.target.closest('.track, .clip');
+            const target = event.target.closest('.track');
             if (target && target !== event.target.closest('.dragging')) {
                 document.querySelectorAll('.over').forEach(el => el.classList.remove('over'));
                 target.classList.add('over');
@@ -115,54 +141,31 @@
             event.preventDefault();
             const mediaId = event.dataTransfer.getData('text/plain');
             const draggedElement = document.querySelector(`[data-id="${mediaId}"]`);
-            const dropTarget = event.target.closest('.track, .clip');
+            const dropTarget = event.target.closest('.track');
 
             if (!draggedElement || !dropTarget) return;
 
             // Logic for dropping a new item from the library
             if (draggedElement.classList.contains('media-item')) {
                 const file = mediaFiles.get(mediaId);
-                const track = dropTarget.closest('.track');
 
-                if (track) {
+                if (dropTarget) {
                     const isVideoOrImage = file.type.startsWith('video/') || file.type.startsWith('image/');
                     const isAudio = file.type.startsWith('audio/');
 
-                    if (track.id === 'track-video-1' && isVideoOrImage) {
+                    if (dropTarget.id === 'track-video-1' && isVideoOrImage) {
                         const newClip = createClipElement(file, mediaId);
-                        track.appendChild(newClip);
-                        updatePreview(file);
-                    } else if (track.id === 'track-audio-1' && isAudio) {
+                        dropTarget.appendChild(newClip);
+                    } else if (dropTarget.id === 'track-audio-1' && isAudio) {
                         const newClip = createClipElement(file, mediaId);
-                        track.appendChild(newClip);
-                        updatePreview(file);
+                        dropTarget.appendChild(newClip);
                     } else {
-                        alert(`Cannot drop a ${file.type.split('/')} file into the ${track.id.split('-')} track.`);
+                        alert(`Cannot drop a ${file.type.split('/')[0]} file into the ${dropTarget.id.split('-')[1]} track.`);
                     }
                 }
             } 
-            // Logic for reordering existing clips
-            else if (draggedElement.classList.contains('clip')) {
-                const dropTrack = dropTarget.closest('.track');
-                const draggedTrack = draggedElement.closest('.track');
-
-                if (dropTrack && draggedTrack && dropTrack.id === draggedTrack.id) {
-                    if (dropTarget.classList.contains('clip')) {
-                        dropTrack.insertBefore(draggedElement, dropTarget);
-                    } else if (dropTarget.classList.contains('track')) {
-                        dropTrack.appendChild(draggedElement);
-                    }
-                }
-            }
             draggedElement.classList.remove('dragging');
             document.querySelectorAll('.over').forEach(el => el.classList.remove('over'));
-        });
-
-        timeline.addEventListener('dblclick', (event) => {
-            const clip = event.target.closest('.clip');
-            if (clip) {
-                clip.remove();
-            }
         });
 
         function createClipElement(file, mediaId) {
@@ -171,43 +174,129 @@
             newClip.textContent = file.name;
             newClip.draggable = true;
             newClip.dataset.id = mediaId;
+            
+            const duplicateBtn = document.createElement('button');
+            duplicateBtn.textContent = 'Duplicate';
+            duplicateBtn.onclick = (e) => {
+                e.stopPropagation();
+                const duplicatedClip = createClipElement(file, `media-${Date.now()}-${fileCounter++}`);
+                newClip.parentNode.appendChild(duplicatedClip);
+            };
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'X';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                newClip.remove();
+            };
+
+            newClip.appendChild(duplicateBtn);
+            newClip.appendChild(deleteBtn);
+
             return newClip;
         }
 
-        function updatePreview(file) {
-            const fileURL = URL.createObjectURL(file);
+        playPauseBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                isPlaying = false;
+                playPauseBtn.textContent = '▶';
+            } else {
+                isPlaying = true;
+                playPauseBtn.textContent = '⏸';
+                startFullPreview();
+            }
+        });
+
+        let currentClipIndex = 0;
+        let clipStartTime = 0;
+
+        async function startFullPreview() {
+            const videoClips = tracks['video'].querySelectorAll('.clip');
+            if (videoClips.length === 0) {
+                isPlaying = false;
+                playPauseBtn.textContent = '▶';
+                return;
+            }
+
+            currentClipIndex = 0;
+            clipStartTime = Date.now();
+            requestAnimationFrame(previewLoop);
+        }
+
+        async function previewLoop() {
+            if (!isPlaying) return;
+
+            const videoClips = tracks['video'].querySelectorAll('.clip');
+            if (currentClipIndex >= videoClips.length) {
+                isPlaying = false;
+                playPauseBtn.textContent = '▶';
+                currentClipIndex = 0;
+                return;
+            }
+
+            const currentClip = videoClips[currentClipIndex];
+            const mediaId = currentClip.dataset.id;
+            const file = mediaFiles.get(mediaId);
+
+            const elapsed = (Date.now() - clipStartTime) / 1000;
+
             if (file.type.startsWith('image/')) {
+                if (elapsed >= imageDuration) {
+                    currentClipIndex++;
+                    clipStartTime = Date.now();
+                }
                 const img = new Image();
                 img.onload = () => {
-                    previewCanvas.width = img.width;
-                    previewCanvas.height = img.height;
+                    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
                     ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
                 };
-                img.src = fileURL;
+                img.src = URL.createObjectURL(file);
             } else if (file.type.startsWith('video/')) {
                 if (!previewVideoElement) {
                     previewVideoElement = document.createElement('video');
                     previewVideoElement.className = 'hidden-video';
                     document.body.appendChild(previewVideoElement);
                 }
-                previewVideoElement.src = fileURL;
-                previewVideoElement.addEventListener('loadeddata', () => {
-                    previewCanvas.width = previewVideoElement.videoWidth;
-                    previewCanvas.height = previewVideoElement.videoHeight;
-                    previewVideoElement.play();
-                    requestAnimationFrame(drawVideoFrame);
-                });
+                previewVideoElement.src = URL.createObjectURL(file);
+                await previewVideoElement.play();
+
+                previewVideoElement.addEventListener('ended', () => {
+                    currentClipIndex++;
+                    clipStartTime = Date.now();
+                }, { once: true });
             }
+            
+            // Move timeline indicator
+            const timelineWidth = timeline.scrollWidth;
+            const totalDuration = calculateTotalDuration();
+            if (totalDuration > 0) {
+                currentPlaybackTime += (Date.now() - clipStartTime) / 1000;
+                const progress = (currentPlaybackTime / totalDuration) * 100;
+                timelineIndicator.style.transform = `translateX(${progress}%)`;
+            }
+
+            requestAnimationFrame(previewLoop);
         }
 
-        function drawVideoFrame() {
-            if (previewVideoElement && !previewVideoElement.paused && !previewVideoElement.ended) {
-                ctx.drawImage(previewVideoElement, 0, 0, previewCanvas.width, previewCanvas.height);
-                requestAnimationFrame(drawVideoFrame);
+        function calculateTotalDuration() {
+            let totalDuration = 0;
+            const videoClips = tracks['video'].querySelectorAll('.clip');
+            for (const clip of videoClips) {
+                const mediaId = clip.dataset.id;
+                const file = mediaFiles.get(mediaId);
+                if (file.type.startsWith('image/')) {
+                    totalDuration += imageDuration;
+                } else if (file.type.startsWith('video/')) {
+                    // This is complex, requires reading video metadata. For simplicity, we use a placeholder.
+                    totalDuration += 10; // Placeholder for now
+                }
             }
+            return totalDuration;
         }
 
         function changeSpeed(speed) {
+            // For full sequence preview, this would involve controlling multiple videos.
+            // Simplified for single video preview.
             if (previewVideoElement) {
                 previewVideoElement.playbackRate = parseFloat(speed);
             }
@@ -215,8 +304,8 @@
 
         function clearAll() {
             mediaLibraryItems.innerHTML = '';
-            tracks['video'].textContent = 'Video Track 1';
-            tracks['audio'].textContent = 'Audio Track 1';
+            tracks['video'].innerHTML = ''; // Keep track label for now
+            tracks['audio'].innerHTML = ''; // Keep track label for now
             mediaFiles.clear();
             ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             mediaFilesInput.value = '';
@@ -225,6 +314,9 @@
                 previewVideoElement.remove();
                 previewVideoElement = null;
             }
+            isPlaying = false;
+            playPauseBtn.textContent = '▶';
+            timelineIndicator.style.transform = `translateX(0)`;
         }
 
         async function saveVideo() {
