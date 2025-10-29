@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Subscriber Count Blob:bladebrosbedwarsbacks1.github.io</title></head><body><p><span class="subscriberCount" id="subscriber-count-display">Loading...</span></p><script>
-        const API_URL = process.env.YOUTUBE_DATA_API_URL;
+        const API_URL = secrets.YOUTUBE_DATA_API_URL;
         async function getSubscriberCount() {
             try {
                 const response = await fetch(API_URL);
