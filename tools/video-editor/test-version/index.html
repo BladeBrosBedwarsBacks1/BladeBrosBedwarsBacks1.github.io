@@ -139,12 +139,16 @@
             } 
             // Logic for reordering existing clips
             else if (draggedElement.classList.contains('clip')) {
-                if (dropTarget.classList.contains('clip')) {
-                    if (draggedElement.parentNode === dropTarget.parentNode) {
-                        dropTarget.parentNode.insertBefore(draggedElement, dropTarget);
+                const dropTrack = dropTarget.closest('.track');
+                const draggedTrack = draggedElement.closest('.track');
+
+                // Only reorder within the same track for now
+                if (dropTrack && draggedTrack && dropTrack.id === draggedTrack.id) {
+                    if (dropTarget.classList.contains('clip')) {
+                        dropTrack.insertBefore(draggedElement, dropTarget);
+                    } else if (dropTarget.classList.contains('track')) {
+                        dropTrack.appendChild(draggedElement);
                     }
-                } else if (dropTarget.classList.contains('track')) {
-                    dropTarget.appendChild(draggedElement);
                 }
             }
             draggedElement.classList.remove('dragging');
