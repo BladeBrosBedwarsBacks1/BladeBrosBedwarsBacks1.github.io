@@ -10,7 +10,7 @@
         .editor-container { display: flex; width: 100%; max-width: 1200px; margin-top: 20px; gap: 20px; }
         .media-library { width: 25%; border: 1px solid #ccc; padding: 10px; overflow-y: auto; height: 60vh; }
         .timeline-area { width: 75%; display: flex; flex-direction: column; position: relative; }
-        .preview-player { width: 100%; border: 1px solid #ccc; background-color: #000; }
+        .preview-player { width: 100%; height: auto; aspect-ratio: 16 / 9; background-color: #000; border: 1px solid #ccc; }
         .timeline { border: 1px solid #ccc; margin-top: 10px; height: 30vh; overflow-x: auto; white-space: nowrap; position: relative; }
         .timestamp-bar { display: flex; align-items: center; background-color: #f0f0f0; padding: 5px; border-bottom: 1px solid #ccc; position: sticky; top: 0; z-index: 10; }
         .timestamp-marker { position: relative; text-align: center; font-size: 0.8em; white-space: nowrap; }
@@ -32,7 +32,6 @@
         #timelineIndicator {
             position: absolute;
             top: 0;
-            left: 0;
             height: 100%;
             width: 2px;
             background-color: red;
@@ -104,7 +103,13 @@
         let currentClipIndex = 0;
         let clipStartTime = 0;
         let totalDuration = 0;
+        let cumulativeTime = 0;
         const imageDuration = 3; // 3 seconds per image clip
+        let trackLabelWidth = 0;
+
+        // Set fixed canvas aspect ratio
+        previewCanvas.width = 800;
+        previewCanvas.height = 450;
 
         mediaFilesInput.addEventListener('change', async (event) => {
             for (const file of event.target.files) {
@@ -163,11 +168,9 @@
                     const isAudio = file.type.startsWith('audio/');
 
                     let duration = 0;
-                    if (isVideoOrImage && file.type.startsWith('video/')) {
+                    if (file.type.startsWith('video/') || file.type.startsWith('audio/')) {
                         duration = await getMediaDuration(file);
-                    } else if (isAudio) {
-                        duration = await getMediaDuration(file);
-                    } else if (isVideoOrImage && file.type.startsWith('image/')) {
+                    } else if (file.type.startsWith('image/')) {
                         duration = imageDuration;
                     }
 
@@ -206,7 +209,7 @@
         function createClipElement(file, mediaId, duration) {
             const newClip = document.createElement('div');
             newClip.className = 'clip';
-            newClip.textContent = file.name.split('/').pop().split('\\').pop().substring(0, 15); // Friendly name
+            newClip.textContent = file.name.split('/').pop().split('\\').pop().substring(0, 15);
             newClip.draggable = false;
             newClip.dataset.id = mediaId;
             newClip.dataset.duration = duration;
@@ -260,6 +263,7 @@
                 }
 
                 currentClipIndex = 0;
+                cumulativeTime = 0;
                 clipStartTime = performance.now();
                 
                 if (previewVideoElement) {
@@ -278,6 +282,7 @@
                 isPlaying = false;
                 playPauseBtn.textContent = '▶';
                 currentClipIndex = 0;
+                cumulativeTime = 0;
                 updateTimelineIndicator(0);
                 return;
             }
@@ -287,33 +292,32 @@
             const file = mediaFiles.get(mediaId);
             const fileURL = URL.createObjectURL(file);
             const clipDuration = parseFloat(currentClip.dataset.duration);
+            const playbackStartTime = performance.now();
 
             if (file.type.startsWith('image/')) {
                 const img = new Image();
                 img.src = fileURL;
                 
-                await new Promise(resolve => {
-                    img.onload = () => {
-                        previewCanvas.width = img.width;
-                        previewCanvas.height = img.height;
-                        ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
-                        resolve();
-                    };
-                });
+                await new Promise(resolve => img.onload = resolve);
                 
-                const startTime = performance.now();
-                const imageLoop = () => {
-                    const elapsed = (performance.now() - startTime) / 1000;
-                    if (!isPlaying || elapsed >= clipDuration) {
+                const frameLoop = () => {
+                    if (!isPlaying) return;
+                    
+                    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+                    drawClippedImage(ctx, img, 0, 0, previewCanvas.width, previewCanvas.height);
+                    
+                    const elapsed = (performance.now() - playbackStartTime) / 1000;
+                    if (elapsed >= clipDuration) {
+                        cumulativeTime += clipDuration;
                         currentClipIndex++;
-                        clipStartTime = performance.now();
                         previewLoop();
                         return;
                     }
-                    updateTimelineIndicator(elapsed);
-                    requestAnimationFrame(imageLoop);
+                    updateTimelineIndicator(cumulativeTime + elapsed);
+                    requestAnimationFrame(frameLoop);
                 };
-                requestAnimationFrame(imageLoop);
+                requestAnimationFrame(frameLoop);
+
             } else if (file.type.startsWith('video/')) {
                 if (!previewVideoElement) {
                     previewVideoElement = document.createElement('video');
@@ -324,28 +328,49 @@
                 previewVideoElement.playbackRate = parseFloat(document.getElementById('speedControl').value);
                 await previewVideoElement.play();
                 
-                previewVideoElement.addEventListener('ended', () => {
-                    currentClipIndex++;
-                    clipStartTime = performance.now();
-                    previewLoop();
-                }, { once: true });
-                
-                const startTime = performance.now();
-                const drawVideoFrame = () => {
-                    if (isPlaying && !previewVideoElement.paused && !previewVideoElement.ended) {
-                        previewCanvas.width = previewVideoElement.videoWidth;
-                        previewCanvas.height = previewVideoElement.videoHeight;
-                        ctx.drawImage(previewVideoElement, 0, 0, previewCanvas.width, previewCanvas.height);
-                        const elapsed = (performance.now() - startTime) / 1000;
-                        updateTimelineIndicator(elapsed);
-                        requestAnimationFrame(drawVideoFrame);
+                const frameLoop = () => {
+                    if (!isPlaying) return;
+                    
+                    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+                    drawClippedVideo(ctx, previewVideoElement, 0, 0, previewCanvas.width, previewCanvas.height);
+                    
+                    const elapsed = (performance.now() - playbackStartTime) / 1000;
+                    updateTimelineIndicator(cumulativeTime + elapsed);
+
+                    if (previewVideoElement.ended) {
+                        cumulativeTime += clipDuration;
+                        currentClipIndex++;
+                        previewLoop();
+                        return;
                     }
+                    requestAnimationFrame(frameLoop);
                 };
-                requestAnimationFrame(drawVideoFrame);
+                requestAnimationFrame(frameLoop);
             }
         }
 
+        function drawClippedImage(ctx, image, x, y, width, height) {
+            const hRatio = width / image.width;
+            const vRatio = height / image.height;
+            const ratio = Math.min(hRatio, vRatio);
+            const centerShiftX = (width - image.width * ratio) / 2;
+            const centerShiftY = (height - image.height * ratio) / 2;
+            ctx.drawImage(image, 0, 0, image.width, image.height,
+                          x + centerShiftX, y + centerShiftY, image.width * ratio, image.height * ratio);
+        }
+
+        function drawClippedVideo(ctx, video, x, y, width, height) {
+            const hRatio = width / video.videoWidth;
+            const vRatio = height / video.videoHeight;
+            const ratio = Math.min(hRatio, vRatio);
+            const centerShiftX = (width - video.videoWidth * ratio) / 2;
+            const centerShiftY = (height - video.videoHeight * ratio) / 2;
+            ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight,
+                          x + centerShiftX, y + centerShiftY, video.videoWidth * ratio, video.videoHeight * ratio);
+        }
+
         async function updateTimeline() {
+            trackLabelWidth = tracks['video'].querySelector('.track-label') ? tracks['video'].querySelector('.track-label').offsetWidth : 100;
             totalDuration = await calculateTotalDuration();
             updateTimestampBar();
             updateClipWidths();
@@ -362,7 +387,7 @@
 
         function updateClipWidths() {
             const clips = tracks['video'].querySelectorAll('.clip');
-            const trackWidth = timeline.scrollWidth;
+            const trackAreaWidth = timeline.scrollWidth - trackLabelWidth;
             
             for (const clip of clips) {
                 const duration = parseFloat(clip.dataset.duration);
@@ -377,16 +402,14 @@
 
         function updateTimestampBar() {
             timestampBar.innerHTML = '';
-            const numMarkers = 20;
-            const interval = totalDuration / numMarkers;
-
-            for (let i = 0; i <= numMarkers; i++) {
+            const interval = 1; // 1 second intervals
+            for (let i = 0; i <= totalDuration; i += interval) {
                 const marker = document.createElement('div');
                 marker.className = 'timestamp-marker';
-                marker.textContent = formatTime(i * interval);
-                marker.style.width = `calc(100% / ${numMarkers})`;
+                marker.textContent = formatTime(i);
                 timestampBar.appendChild(marker);
             }
+            timestampBar.style.marginLeft = `${trackLabelWidth}px`;
         }
         
         function formatTime(seconds) {
@@ -397,24 +420,10 @@
             return `${formattedMinutes}:${formattedSeconds}`;
         }
 
-        function updateTimelineIndicator(elapsedInClip) {
-            const clips = tracks['video'].querySelectorAll('.clip');
-            let cumulativeTime = 0;
-
-            for (let i = 0; i < clips.length; i++) {
-                const clip = clips[i];
-                const duration = parseFloat(clip.dataset.duration);
-
-                if (i < currentClipIndex) {
-                    cumulativeTime += duration;
-                } else if (i === currentClipIndex) {
-                    cumulativeTime += elapsedInClip;
-                    break;
-                }
-            }
-
-            const indicatorPosition = (cumulativeTime / totalDuration) * timeline.scrollWidth;
-            timelineIndicator.style.transform = `translateX(${indicatorPosition}px)`;
+        function updateTimelineIndicator(currentTime) {
+            const trackAreaWidth = timeline.scrollWidth - trackLabelWidth;
+            const indicatorPosition = (currentTime / totalDuration) * trackAreaWidth;
+            timelineIndicator.style.transform = `translateX(${trackLabelWidth + indicatorPosition}px)`;
         }
 
         function changeSpeed(speed) {
@@ -425,8 +434,8 @@
 
         async function clearAll() {
             mediaLibraryItems.innerHTML = '';
-            tracks['video'].innerHTML = 'Video Track 1';
-            tracks['audio'].innerHTML = 'Audio Track 1';
+            tracks['video'].innerHTML = '<div class="track-label">Video Track 1</div>';
+            tracks['audio'].innerHTML = '<div class="track-label">Audio Track 1</div>';
             mediaFiles.clear();
             ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             mediaFilesInput.value = '';
@@ -441,11 +450,9 @@
             await updateTimeline();
         }
 
-        async function saveVideo() {
-            alert('Saving requires a library like ffmpeg.wasm. This is a placeholder.');
-        }
-
-        // Initial timeline update
+        // Add track labels and initial update
+        tracks['video'].innerHTML = '<div class="track-label">Video Track 1</div>';
+        tracks['audio'].innerHTML = '<div class="track-label">Audio Track 1</div>';
         updateTimeline();
     </script>
 </body>
