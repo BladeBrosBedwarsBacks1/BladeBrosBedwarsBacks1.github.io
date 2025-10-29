@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Track Video Editor</title>
+    <title>Beta Testing Video Editor With Audio</title>
+    <link rel="icon" type="image/png" href="/resources/favicons/video-editor.png">
     <style>
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .editor-container { display: flex; width: 100%; max-width: 1200px; margin-top: 20px; gap: 20px; }
@@ -105,7 +106,7 @@
         let totalDuration = 0;
         const imageDuration = 3; // 3 seconds per image clip
 
-        mediaFilesInput.addEventListener('change', (event) => {
+        mediaFilesInput.addEventListener('change', async (event) => {
             for (const file of event.target.files) {
                 const uniqueId = `media-${Date.now()}-${fileCounter++}`;
                 mediaFiles.set(uniqueId, file);
@@ -291,10 +292,17 @@
                 const img = new Image();
                 img.src = fileURL;
                 
-                const startTime = performance.now();
-                let frameTime = startTime;
+                await new Promise(resolve => {
+                    img.onload = () => {
+                        previewCanvas.width = img.width;
+                        previewCanvas.height = img.height;
+                        ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
+                        resolve();
+                    };
+                });
                 
-                const drawImage = () => {
+                const startTime = performance.now();
+                const imageLoop = () => {
                     const elapsed = (performance.now() - startTime) / 1000;
                     if (!isPlaying || elapsed >= clipDuration) {
                         currentClipIndex++;
@@ -302,18 +310,10 @@
                         previewLoop();
                         return;
                     }
-                    if (img.complete) {
-                        previewCanvas.width = img.width;
-                        previewCanvas.height = img.height;
-                        ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
-                        updateTimelineIndicator((performance.now() - clipStartTime) / 1000);
-                        requestAnimationFrame(drawImage);
-                    } else {
-                        requestAnimationFrame(drawImage);
-                    }
+                    updateTimelineIndicator(elapsed);
+                    requestAnimationFrame(imageLoop);
                 };
-
-                drawImage();
+                requestAnimationFrame(imageLoop);
             } else if (file.type.startsWith('video/')) {
                 if (!previewVideoElement) {
                     previewVideoElement = document.createElement('video');
@@ -324,19 +324,21 @@
                 previewVideoElement.playbackRate = parseFloat(document.getElementById('speedControl').value);
                 await previewVideoElement.play();
                 
+                previewVideoElement.addEventListener('ended', () => {
+                    currentClipIndex++;
+                    clipStartTime = performance.now();
+                    previewLoop();
+                }, { once: true });
+                
                 const startTime = performance.now();
-
                 const drawVideoFrame = () => {
                     if (isPlaying && !previewVideoElement.paused && !previewVideoElement.ended) {
                         previewCanvas.width = previewVideoElement.videoWidth;
                         previewCanvas.height = previewVideoElement.videoHeight;
                         ctx.drawImage(previewVideoElement, 0, 0, previewCanvas.width, previewCanvas.height);
-                        updateTimelineIndicator((performance.now() - startTime) / 1000);
+                        const elapsed = (performance.now() - startTime) / 1000;
+                        updateTimelineIndicator(elapsed);
                         requestAnimationFrame(drawVideoFrame);
-                    } else if (previewVideoElement.ended) {
-                        currentClipIndex++;
-                        clipStartTime = performance.now();
-                        previewLoop();
                     }
                 };
                 requestAnimationFrame(drawVideoFrame);
@@ -360,25 +362,29 @@
 
         function updateClipWidths() {
             const clips = tracks['video'].querySelectorAll('.clip');
-            const timelineWidth = timeline.clientWidth - 20; // Account for padding
+            const trackWidth = timeline.scrollWidth;
+            
             for (const clip of clips) {
                 const duration = parseFloat(clip.dataset.duration);
                 if (totalDuration > 0) {
                     const widthPercentage = (duration / totalDuration) * 100;
-                    clip.style.width = `calc(${widthPercentage}% - 10px)`; // Account for clip margin
+                    clip.style.width = `${widthPercentage}%`;
                 } else {
-                    clip.style.width = '100px'; // Default width if no clips
+                    clip.style.width = '100px';
                 }
             }
         }
 
         function updateTimestampBar() {
-            const secondsPerMarker = 1;
             timestampBar.innerHTML = '';
-            for (let i = 0; i < totalDuration + secondsPerMarker; i += secondsPerMarker) {
+            const numMarkers = 20;
+            const interval = totalDuration / numMarkers;
+
+            for (let i = 0; i <= numMarkers; i++) {
                 const marker = document.createElement('div');
                 marker.className = 'timestamp-marker';
-                marker.textContent = formatTime(i);
+                marker.textContent = formatTime(i * interval);
+                marker.style.width = `calc(100% / ${numMarkers})`;
                 timestampBar.appendChild(marker);
             }
         }
