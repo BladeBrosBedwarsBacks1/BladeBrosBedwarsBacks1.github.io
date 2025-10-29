@@ -11,6 +11,8 @@
         .timeline-area { width: 75%; display: flex; flex-direction: column; position: relative; }
         .preview-player { width: 100%; border: 1px solid #ccc; background-color: #000; }
         .timeline { border: 1px solid #ccc; margin-top: 10px; height: 30vh; overflow-x: auto; white-space: nowrap; position: relative; }
+        .timestamp-bar { display: flex; align-items: center; background-color: #f0f0f0; padding: 5px; border-bottom: 1px solid #ccc; }
+        .timestamp-marker { position: relative; flex-grow: 1; text-align: center; }
         .track { border-bottom: 1px solid #ddd; padding: 5px; min-height: 50px; display: flex; align-items: center; gap: 5px; }
         .clip { background-color: #4CAF50; border: 1px solid #388E3C; height: 40px; border-radius: 3px; cursor: grab; position: relative; display: inline-flex; align-items: center; padding: 0 5px; color: white; margin: 2px 0; }
         .media-item { border: 1px solid #eee; padding: 5px; margin-bottom: 5px; cursor: grab; background-color: #f9f9f9; }
@@ -35,6 +37,7 @@
             pointer-events: none;
             transform: translateX(0);
         }
+        .clip-buttons { margin-left: 5px; }
     </style>
 </head>
 <body>
@@ -58,7 +61,7 @@
     </div>
 
     <div class="warning">
-        <p>Warning: Once placed on a track, clips cannot be reordered. To change the order, you must delete the clips and add them again in the correct sequence.</p>
+        <p>Warning: Once placed on a track, clips cannot be reordered. To change the order, you must delete clips and add them again in the correct sequence.</p>
     </div>
 
     <div class="editor-container">
@@ -69,6 +72,7 @@
         <div class="timeline-area">
             <canvas id="previewCanvas" class="preview-player"></canvas>
             <div class="timeline">
+                <div class="timestamp-bar" id="timestampBar"></div>
                 <div id="timelineIndicator"></div>
                 <div id="track-video-1" class="track">Video Track 1</div>
                 <div id="track-audio-1" class="track">Audio Track 1</div>
@@ -88,6 +92,7 @@
         const timeline = document.querySelector('.timeline');
         const playPauseBtn = document.getElementById('playPauseBtn');
         const timelineIndicator = document.getElementById('timelineIndicator');
+        const timestampBar = document.getElementById('timestampBar');
 
         const mediaFiles = new Map();
         let fileCounter = 0;
@@ -95,7 +100,7 @@
         let isPlaying = false;
         let currentClipIndex = 0;
         let clipStartTime = 0;
-        let totalDuration = 0;
+        const imageDuration = 3; // 3 seconds per image clip
 
         mediaFilesInput.addEventListener('change', (event) => {
             for (const file of event.target.files) {
@@ -114,7 +119,7 @@
 
         document.body.addEventListener('dragstart', (event) => {
             const target = event.target;
-            if (target.classList.contains('media-item') || target.classList.contains('clip')) {
+            if (target.classList.contains('media-item')) {
                 event.dataTransfer.setData('text/plain', target.dataset.id);
                 event.dataTransfer.effectAllowed = 'copy';
                 target.classList.add('dragging');
@@ -166,28 +171,33 @@
             } 
             draggedElement.classList.remove('dragging');
             document.querySelectorAll('.over').forEach(el => el.classList.remove('over'));
+            updateTimestampBar();
         });
 
         function createClipElement(file, mediaId) {
             const newClip = document.createElement('div');
             newClip.className = 'clip';
             newClip.textContent = file.name;
-            newClip.draggable = false; // Disable reordering drag
+            newClip.draggable = false;
             newClip.dataset.id = mediaId;
             
             const duplicateBtn = document.createElement('button');
             duplicateBtn.textContent = 'Duplicate';
+            duplicateBtn.className = 'clip-buttons';
             duplicateBtn.onclick = (e) => {
                 e.stopPropagation();
                 const duplicatedClip = createClipElement(file, `media-${Date.now()}-${fileCounter++}`);
                 newClip.parentNode.appendChild(duplicatedClip);
+                updateTimestampBar();
             };
             
             const deleteBtn = document.createElement('button');
             deleteBtn.textContent = 'X';
+            deleteBtn.className = 'clip-buttons';
             deleteBtn.onclick = (e) => {
                 e.stopPropagation();
                 newClip.remove();
+                updateTimestampBar();
             };
 
             newClip.appendChild(duplicateBtn);
@@ -220,7 +230,8 @@
 
             currentClipIndex = 0;
             currentPlaybackTime = 0;
-            totalDuration = calculateTotalDuration();
+            totalDuration = await calculateTotalDuration();
+            
             if (previewVideoElement) {
                 previewVideoElement.pause();
             }
@@ -248,6 +259,7 @@
             if (file.type.startsWith('image/')) {
                 const img = new Image();
                 img.src = fileURL;
+                
                 const startTime = Date.now();
                 
                 await new Promise(resolve => {
@@ -259,7 +271,7 @@
                     };
                 });
                 
-                await new Promise(resolve => setTimeout(resolve, 3000)); // Show image for 3 seconds
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 currentClipIndex++;
                 requestAnimationFrame(previewLoop);
             } else if (file.type.startsWith('video/')) {
@@ -288,57 +300,96 @@
             updateTimelineIndicator();
         }
 
-        function calculateTotalDuration() {
+        async function calculateTotalDuration() {
             let totalDuration = 0;
             const videoClips = tracks['video'].querySelectorAll('.clip');
             for (const clip of videoClips) {
                 const mediaId = clip.dataset.id;
                 const file = mediaFiles.get(mediaId);
                 if (file.type.startsWith('image/')) {
-                    totalDuration += 3;
+                    totalDuration += imageDuration;
                 } else if (file.type.startsWith('video/')) {
-                    // Requires reading video metadata, which is complex. Use placeholder.
-                    totalDuration += 10;
+                    const duration = await new Promise(resolve => {
+                        const video = document.createElement('video');
+                        video.preload = 'metadata';
+                        video.onloadedmetadata = () => {
+                            URL.revokeObjectURL(video.src);
+                            resolve(video.duration);
+                        };
+                        video.src = URL.createObjectURL(file);
+                    });
+                    totalDuration += duration;
                 }
             }
             return totalDuration;
         }
 
+        function updateTimestampBar() {
+            const videoClips = tracks['video'].querySelectorAll('.clip');
+            let cumulativeTime = 0;
+            timestampBar.innerHTML = '';
+            
+            const totalWidth = timeline.clientWidth;
+
+            for (const clip of videoClips) {
+                const mediaId = clip.dataset.id;
+                const file = mediaFiles.get(mediaId);
+                let clipDuration = 0;
+                if (file.type.startsWith('image/')) {
+                    clipDuration = imageDuration;
+                } else if (file.type.startsWith('video/')) {
+                    // Requires reading video metadata, which is complex. Use placeholder.
+                    clipDuration = 10;
+                }
+                
+                const marker = document.createElement('div');
+                marker.className = 'timestamp-marker';
+                marker.textContent = formatTime(cumulativeTime);
+                marker.style.width = (clipDuration / totalDuration) * totalWidth + 'px';
+                timestampBar.appendChild(marker);
+                
+                cumulativeTime += clipDuration;
+            }
+        }
+        
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+        }
+
         function updateTimelineIndicator() {
             const timelineWidth = timeline.scrollWidth;
-            const totalDuration = calculateTotalDuration();
             
             if (totalDuration > 0) {
                 let cumulativeTime = 0;
-                let clipWidths = [];
                 const videoClips = tracks['video'].querySelectorAll('.clip');
 
-                for (const clip of videoClips) {
+                for (let i = 0; i < videoClips.length; i++) {
+                    const clip = videoClips[i];
                     const mediaId = clip.dataset.id;
                     const file = mediaFiles.get(mediaId);
                     let clipDuration = 0;
 
                     if (file.type.startsWith('image/')) {
-                        clipDuration = 3;
+                        clipDuration = imageDuration;
                     } else if (file.type.startsWith('video/')) {
+                        // Requires reading video metadata, which is complex. Use placeholder.
                         clipDuration = 10;
                     }
-                    clipWidths.push({ duration: clipDuration, element: clip });
-                }
 
-                let currentPosition = 0;
-                for (let i = 0; i < videoClips.length; i++) {
-                    const clip = clipWidths[i];
                     if (currentClipIndex === i) {
                         const elapsedInClip = (Date.now() - clipStartTime) / 1000;
-                        currentPosition = ((cumulativeTime + elapsedInClip) / totalDuration) * 100;
+                        currentPlaybackTime = cumulativeTime + elapsedInClip;
                         break;
                     }
-                    cumulativeTime += clip.duration;
+                    cumulativeTime += clipDuration;
                 }
 
-                timelineIndicator.style.transform = `translateX(${currentPosition}%)`;
+                const progress = (currentPlaybackTime / totalDuration) * 100;
+                timelineIndicator.style.transform = `translateX(${progress}%)`;
             }
+
             if (isPlaying) {
                 requestAnimationFrame(updateTimelineIndicator);
             }
@@ -365,6 +416,7 @@
             isPlaying = false;
             playPauseBtn.textContent = '▶';
             timelineIndicator.style.transform = `translateX(0)`;
+            updateTimestampBar();
         }
 
         async function saveVideo() {
