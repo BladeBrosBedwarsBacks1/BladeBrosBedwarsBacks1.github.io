@@ -10,7 +10,7 @@
         .media-library { width: 25%; border: 1px solid #ccc; padding: 10px; overflow-y: auto; height: 60vh; }
         .timeline-area { width: 75%; display: flex; flex-direction: column; position: relative; }
         .preview-player { width: 100%; border: 1px solid #ccc; background-color: #000; }
-        .timeline { border: 1px solid #ccc; margin-top: 10px; height: 30vh; overflow-x: auto; white-space: nowrap; }
+        .timeline { border: 1px solid #ccc; margin-top: 10px; height: 30vh; overflow-x: auto; white-space: nowrap; position: relative; }
         .track { border-bottom: 1px solid #ddd; padding: 5px; min-height: 50px; display: flex; align-items: center; gap: 5px; }
         .clip { background-color: #4CAF50; border: 1px solid #388E3C; height: 40px; border-radius: 3px; cursor: grab; position: relative; display: inline-flex; align-items: center; padding: 0 5px; color: white; margin: 2px 0; }
         .media-item { border: 1px solid #eee; padding: 5px; margin-bottom: 5px; cursor: grab; background-color: #f9f9f9; }
@@ -58,7 +58,7 @@
     </div>
 
     <div class="warning">
-        <p>Warning: Make sure that you put the videos in the correct order because once placed on the track, the only way to reorder it is to clear the tracks with the Clear All button.</p>
+        <p>Warning: Once placed on a track, clips cannot be reordered. To change the order, you must delete the clips and add them again in the correct sequence.</p>
     </div>
 
     <div class="editor-container">
@@ -91,10 +91,11 @@
 
         const mediaFiles = new Map();
         let fileCounter = 0;
-        let previewVideoElement = null; // For video preview
+        let previewVideoElement = null;
         let isPlaying = false;
-        let currentPlaybackTime = 0;
-        let imageDuration = 3; // 3 seconds per image clip
+        let currentClipIndex = 0;
+        let clipStartTime = 0;
+        let totalDuration = 0;
 
         mediaFilesInput.addEventListener('change', (event) => {
             for (const file of event.target.files) {
@@ -145,7 +146,6 @@
 
             if (!draggedElement || !dropTarget) return;
 
-            // Logic for dropping a new item from the library
             if (draggedElement.classList.contains('media-item')) {
                 const file = mediaFiles.get(mediaId);
 
@@ -160,7 +160,7 @@
                         const newClip = createClipElement(file, mediaId);
                         dropTarget.appendChild(newClip);
                     } else {
-                        alert(`Cannot drop a ${file.type.split('/')[0]} file into the ${dropTarget.id.split('-')[1]} track.`);
+                        alert(`Cannot drop a ${file.type.split('/')} file into the ${dropTarget.id.split('-')} track.`);
                     }
                 }
             } 
@@ -172,7 +172,7 @@
             const newClip = document.createElement('div');
             newClip.className = 'clip';
             newClip.textContent = file.name;
-            newClip.draggable = true;
+            newClip.draggable = false; // Disable reordering drag
             newClip.dataset.id = mediaId;
             
             const duplicateBtn = document.createElement('button');
@@ -182,7 +182,7 @@
                 const duplicatedClip = createClipElement(file, `media-${Date.now()}-${fileCounter++}`);
                 newClip.parentNode.appendChild(duplicatedClip);
             };
-
+            
             const deleteBtn = document.createElement('button');
             deleteBtn.textContent = 'X';
             deleteBtn.onclick = (e) => {
@@ -200,15 +200,15 @@
             if (isPlaying) {
                 isPlaying = false;
                 playPauseBtn.textContent = '▶';
+                if (previewVideoElement) {
+                    previewVideoElement.pause();
+                }
             } else {
                 isPlaying = true;
                 playPauseBtn.textContent = '⏸';
                 startFullPreview();
             }
         });
-
-        let currentClipIndex = 0;
-        let clipStartTime = 0;
 
         async function startFullPreview() {
             const videoClips = tracks['video'].querySelectorAll('.clip');
@@ -219,7 +219,11 @@
             }
 
             currentClipIndex = 0;
-            clipStartTime = Date.now();
+            currentPlaybackTime = 0;
+            totalDuration = calculateTotalDuration();
+            if (previewVideoElement) {
+                previewVideoElement.pause();
+            }
             requestAnimationFrame(previewLoop);
         }
 
@@ -231,51 +235,57 @@
                 isPlaying = false;
                 playPauseBtn.textContent = '▶';
                 currentClipIndex = 0;
+                currentPlaybackTime = 0;
+                timelineIndicator.style.transform = `translateX(0%)`;
                 return;
             }
 
             const currentClip = videoClips[currentClipIndex];
             const mediaId = currentClip.dataset.id;
             const file = mediaFiles.get(mediaId);
-
-            const elapsed = (Date.now() - clipStartTime) / 1000;
+            const fileURL = URL.createObjectURL(file);
 
             if (file.type.startsWith('image/')) {
-                if (elapsed >= imageDuration) {
-                    currentClipIndex++;
-                    clipStartTime = Date.now();
-                }
                 const img = new Image();
-                img.onload = () => {
-                    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-                    ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
-                };
-                img.src = URL.createObjectURL(file);
+                img.src = fileURL;
+                const startTime = Date.now();
+                
+                await new Promise(resolve => {
+                    img.onload = () => {
+                        previewCanvas.width = img.width;
+                        previewCanvas.height = img.height;
+                        ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
+                        resolve();
+                    };
+                });
+                
+                await new Promise(resolve => setTimeout(resolve, 3000)); // Show image for 3 seconds
+                currentClipIndex++;
+                requestAnimationFrame(previewLoop);
             } else if (file.type.startsWith('video/')) {
                 if (!previewVideoElement) {
                     previewVideoElement = document.createElement('video');
                     previewVideoElement.className = 'hidden-video';
                     document.body.appendChild(previewVideoElement);
                 }
-                previewVideoElement.src = URL.createObjectURL(file);
+                previewVideoElement.src = fileURL;
                 await previewVideoElement.play();
-
+                
                 previewVideoElement.addEventListener('ended', () => {
                     currentClipIndex++;
-                    clipStartTime = Date.now();
+                    previewLoop();
                 }, { once: true });
+                
+                function drawVideoFrame() {
+                    if (isPlaying && !previewVideoElement.paused && !previewVideoElement.ended) {
+                        ctx.drawImage(previewVideoElement, 0, 0, previewCanvas.width, previewCanvas.height);
+                        requestAnimationFrame(drawVideoFrame);
+                    }
+                }
+                requestAnimationFrame(drawVideoFrame);
             }
             
-            // Move timeline indicator
-            const timelineWidth = timeline.scrollWidth;
-            const totalDuration = calculateTotalDuration();
-            if (totalDuration > 0) {
-                currentPlaybackTime += (Date.now() - clipStartTime) / 1000;
-                const progress = (currentPlaybackTime / totalDuration) * 100;
-                timelineIndicator.style.transform = `translateX(${progress}%)`;
-            }
-
-            requestAnimationFrame(previewLoop);
+            updateTimelineIndicator();
         }
 
         function calculateTotalDuration() {
@@ -285,18 +295,56 @@
                 const mediaId = clip.dataset.id;
                 const file = mediaFiles.get(mediaId);
                 if (file.type.startsWith('image/')) {
-                    totalDuration += imageDuration;
+                    totalDuration += 3;
                 } else if (file.type.startsWith('video/')) {
-                    // This is complex, requires reading video metadata. For simplicity, we use a placeholder.
-                    totalDuration += 10; // Placeholder for now
+                    // Requires reading video metadata, which is complex. Use placeholder.
+                    totalDuration += 10;
                 }
             }
             return totalDuration;
         }
 
+        function updateTimelineIndicator() {
+            const timelineWidth = timeline.scrollWidth;
+            const totalDuration = calculateTotalDuration();
+            
+            if (totalDuration > 0) {
+                let cumulativeTime = 0;
+                let clipWidths = [];
+                const videoClips = tracks['video'].querySelectorAll('.clip');
+
+                for (const clip of videoClips) {
+                    const mediaId = clip.dataset.id;
+                    const file = mediaFiles.get(mediaId);
+                    let clipDuration = 0;
+
+                    if (file.type.startsWith('image/')) {
+                        clipDuration = 3;
+                    } else if (file.type.startsWith('video/')) {
+                        clipDuration = 10;
+                    }
+                    clipWidths.push({ duration: clipDuration, element: clip });
+                }
+
+                let currentPosition = 0;
+                for (let i = 0; i < videoClips.length; i++) {
+                    const clip = clipWidths[i];
+                    if (currentClipIndex === i) {
+                        const elapsedInClip = (Date.now() - clipStartTime) / 1000;
+                        currentPosition = ((cumulativeTime + elapsedInClip) / totalDuration) * 100;
+                        break;
+                    }
+                    cumulativeTime += clip.duration;
+                }
+
+                timelineIndicator.style.transform = `translateX(${currentPosition}%)`;
+            }
+            if (isPlaying) {
+                requestAnimationFrame(updateTimelineIndicator);
+            }
+        }
+
         function changeSpeed(speed) {
-            // For full sequence preview, this would involve controlling multiple videos.
-            // Simplified for single video preview.
             if (previewVideoElement) {
                 previewVideoElement.playbackRate = parseFloat(speed);
             }
@@ -304,8 +352,8 @@
 
         function clearAll() {
             mediaLibraryItems.innerHTML = '';
-            tracks['video'].innerHTML = ''; // Keep track label for now
-            tracks['audio'].innerHTML = ''; // Keep track label for now
+            tracks['video'].innerHTML = 'Video Track 1';
+            tracks['audio'].innerHTML = 'Audio Track 1';
             mediaFiles.clear();
             ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             mediaFilesInput.value = '';
