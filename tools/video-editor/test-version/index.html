@@ -76,8 +76,8 @@
             <div class="timeline">
                 <div class="timestamp-bar" id="timestampBar"></div>
                 <div id="timelineIndicator"></div>
-                <div id="track-video-1" class="track">Video Track 1</div>
-                <div id="track-audio-1" class="track">Audio Track 1</div>
+                <div id="track-video-1" class="track"><div class="track-label">Video Track 1</div></div>
+                <div id="track-audio-1" class="track"><div class="track-label">Audio Track 1</div></div>
             </div>
         </div>
     </div>
@@ -99,13 +99,13 @@
         const mediaFiles = new Map();
         let fileCounter = 0;
         let previewVideoElement = null;
+        let previewAudioElement = null; // For audio preview
         let isPlaying = false;
         let currentClipIndex = 0;
-        let clipStartTime = 0;
+        let playbackStartTime = 0;
         let totalDuration = 0;
-        let cumulativeTime = 0;
-        const imageDuration = 3; // 3 seconds per image clip
         let trackLabelWidth = 0;
+        const imageDuration = 3; // 3 seconds per image clip
 
         // Set fixed canvas aspect ratio
         previewCanvas.width = 800;
@@ -209,7 +209,7 @@
         function createClipElement(file, mediaId, duration) {
             const newClip = document.createElement('div');
             newClip.className = 'clip';
-            newClip.textContent = file.name.split('/').pop().split('\\').pop().substring(0, 15);
+            newClip.textContent = file.name.split('/').pop().split('\\').pop().substring(0, 15); // Friendly name
             newClip.draggable = false;
             newClip.dataset.id = mediaId;
             newClip.dataset.duration = duration;
@@ -246,6 +246,9 @@
                 if (previewVideoElement) {
                     previewVideoElement.pause();
                 }
+                if (previewAudioElement) {
+                    previewAudioElement.pause();
+                }
             } else {
                 isPlaying = true;
                 playPauseBtn.textContent = '⏸';
@@ -264,10 +267,13 @@
 
                 currentClipIndex = 0;
                 cumulativeTime = 0;
-                clipStartTime = performance.now();
+                playbackStartTime = performance.now();
                 
                 if (previewVideoElement) {
                     previewVideoElement.pause();
+                }
+                if (previewAudioElement) {
+                    previewAudioElement.pause();
                 }
                 
                 await previewLoop();
@@ -292,7 +298,6 @@
             const file = mediaFiles.get(mediaId);
             const fileURL = URL.createObjectURL(file);
             const clipDuration = parseFloat(currentClip.dataset.duration);
-            const playbackStartTime = performance.now();
 
             if (file.type.startsWith('image/')) {
                 const img = new Image();
@@ -306,7 +311,7 @@
                     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
                     drawClippedImage(ctx, img, 0, 0, previewCanvas.width, previewCanvas.height);
                     
-                    const elapsed = (performance.now() - playbackStartTime) / 1000;
+                    const elapsed = (performance.now() - playbackStartTime) / 1000 - cumulativeTime;
                     if (elapsed >= clipDuration) {
                         cumulativeTime += clipDuration;
                         currentClipIndex++;
@@ -328,24 +333,37 @@
                 previewVideoElement.playbackRate = parseFloat(document.getElementById('speedControl').value);
                 await previewVideoElement.play();
                 
+                previewVideoElement.addEventListener('ended', () => {
+                    cumulativeTime += clipDuration;
+                    currentClipIndex++;
+                    previewLoop();
+                }, { once: true });
+                
                 const frameLoop = () => {
-                    if (!isPlaying) return;
+                    if (!isPlaying || previewVideoElement.paused || previewVideoElement.ended) return;
                     
                     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
                     drawClippedVideo(ctx, previewVideoElement, 0, 0, previewCanvas.width, previewCanvas.height);
                     
-                    const elapsed = (performance.now() - playbackStartTime) / 1000;
+                    const elapsed = (performance.now() - playbackStartTime) / 1000 - cumulativeTime;
                     updateTimelineIndicator(cumulativeTime + elapsed);
-
-                    if (previewVideoElement.ended) {
-                        cumulativeTime += clipDuration;
-                        currentClipIndex++;
-                        previewLoop();
-                        return;
-                    }
+                    
                     requestAnimationFrame(frameLoop);
                 };
                 requestAnimationFrame(frameLoop);
+            }
+            // Add audio playback
+            const audioClips = tracks['audio'].querySelectorAll('.clip');
+            if (audioClips.length > 0) {
+                const audioFile = mediaFiles.get(audioClips[0].dataset.id);
+                const audioURL = URL.createObjectURL(audioFile);
+                if (!previewAudioElement) {
+                    previewAudioElement = document.createElement('audio');
+                    previewAudioElement.className = 'hidden-video';
+                    document.body.appendChild(previewAudioElement);
+                }
+                previewAudioElement.src = audioURL;
+                previewAudioElement.play();
             }
         }
 
@@ -370,7 +388,8 @@
         }
 
         async function updateTimeline() {
-            trackLabelWidth = tracks['video'].querySelector('.track-label') ? tracks['video'].querySelector('.track-label').offsetWidth : 100;
+            const videoLabel = tracks['video'].querySelector('.track-label');
+            trackLabelWidth = videoLabel ? videoLabel.offsetWidth + 10 : 100;
             totalDuration = await calculateTotalDuration();
             updateTimestampBar();
             updateClipWidths();
@@ -387,13 +406,13 @@
 
         function updateClipWidths() {
             const clips = tracks['video'].querySelectorAll('.clip');
-            const trackAreaWidth = timeline.scrollWidth - trackLabelWidth;
+            const trackAreaWidth = timeline.clientWidth - trackLabelWidth;
             
             for (const clip of clips) {
                 const duration = parseFloat(clip.dataset.duration);
                 if (totalDuration > 0) {
                     const widthPercentage = (duration / totalDuration) * 100;
-                    clip.style.width = `${widthPercentage}%`;
+                    clip.style.width = `calc(${widthPercentage}% - 10px)`; // Account for margin
                 } else {
                     clip.style.width = '100px';
                 }
@@ -402,14 +421,21 @@
 
         function updateTimestampBar() {
             timestampBar.innerHTML = '';
-            const interval = 1; // 1 second intervals
-            for (let i = 0; i <= totalDuration; i += interval) {
+            const numMarkers = 10;
+            const interval = totalDuration / numMarkers;
+            
+            // Add a leading empty marker to align with the start of clips
+            const leadingMarker = document.createElement('div');
+            leadingMarker.style.width = `${trackLabelWidth}px`;
+            timestampBar.appendChild(leadingMarker);
+
+            for (let i = 0; i <= numMarkers; i++) {
                 const marker = document.createElement('div');
                 marker.className = 'timestamp-marker';
-                marker.textContent = formatTime(i);
+                marker.textContent = formatTime(i * interval);
+                marker.style.width = `calc(${100/numMarkers}% - 10px)`;
                 timestampBar.appendChild(marker);
             }
-            timestampBar.style.marginLeft = `${trackLabelWidth}px`;
         }
         
         function formatTime(seconds) {
@@ -444,10 +470,19 @@
                 previewVideoElement.remove();
                 previewVideoElement = null;
             }
+            if (previewAudioElement) {
+                previewAudioElement.pause();
+                previewAudioElement.remove();
+                previewAudioElement = null;
+            }
             isPlaying = false;
             playPauseBtn.textContent = '▶';
             timelineIndicator.style.transform = `translateX(0)`;
             await updateTimeline();
+        }
+
+        async function saveVideo() {
+            alert('Saving requires a library like ffmpeg.wasm. This is a placeholder.');
         }
 
         // Add track labels and initial update
