@@ -2,17 +2,29 @@
 <html>
 <head>
     <title>Home - Learning</title>
-    <style>
-        body { font-family: Arial, sans-serif; }
-        .content { text-align: center; } /* Using CSS for centering */
-        .btn { padding: 10px 20px; background: #5865F2; color: white; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; }
-    </style>
 </head>
 <body>
-    <h1 id="title" class="title">Loading...</h1>
-    <div id="content" class="content">Loading...</div>
+    <!-- Login Section (Initial View) -->
+    <div id="login-section">
+        <h1 class="title"></h1>
+        <center class="content"></center>
+        <!-- The JS will populate this with "Login with Discord" button -->
+    </div>
 
-    <!-- Link to the separate JavaScript file -->
+    <!-- Dashboard Section (Hidden by default) -->
+    <div id="dashboard-section" class="hidden">
+        <div class="header">
+            <h1 class="title"></h1>
+            <button onclick="logout()">Logout</button>
+        </div>
+        <p>Welcome back, <strong id="username-display"></strong>!</p>
+        <div class="content">
+             <!-- The JS will populate this with the "Learn" links -->
+        </div>
+        <ul id="weaknesses-display"></ul>
+    </div>
+
+    <!-- Link the correct JavaScript file -->
     <script src="/resources/learn/home.js"></script>
 </body>
 </html>
