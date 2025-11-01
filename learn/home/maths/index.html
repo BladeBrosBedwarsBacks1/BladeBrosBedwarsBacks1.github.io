@@ -3,24 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Change the title for each subject -->
-    <title>Maths - Learning (in development)</title>
+    <title>Home - Learning</title>
     <style>
-        /* Add your CSS styles here or link a separate CSS file */
+        .hidden { display: none; }
+        /* Add your other CSS styles here */
         body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; background-color: #f4f4f9; }
         .container { max-width: 900px; margin: 20px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .hidden { display: none; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
         .btn { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
         .btn:hover { background: #0056b3; }
-        .back-btn { background: #6c757d; }
-        .back-btn:hover { background: #5a6268; }
+        .subject-btn { background: #28a745; margin: 5px; }
+        .subject-btn:hover { background: #218838; }
         .weakness-list { margin-top: 15px; }
         .question-area { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 5px; }
         .input-answer { width: 80%; padding: 10px; margin-right: 10px; }
     </style>
 </head>
-<body><!--
+<body>
     <div class="container">
         <!-- Login Section (Initial View) -->
         <div id="login-section">
@@ -31,37 +30,32 @@
         <!-- Dashboard Section (Hidden by default) -->
         <div id="dashboard-section" class="hidden">
             <div class="header">
-                <!-- Change "Maths" here -->
-                <h1 class="title">Maths Revision</h1> 
-                <button class="btn back-btn" onclick="window.location.href='/learn/home'">Back to Dashboard</button>
+                <h2>Your Revision Dashboard</h2>
+                <button class="btn" onclick="logout()">Logout</button>
             </div>
-            <p>Welcome back, <strong id="username-display"></strong>! Time for some maths questions.</p>
-
+            <p>Welcome back, <strong id="username-display">User</strong>!</p>
             <div class="weakness-list">
-                <h3>Your Maths Weaknesses</h3>
+                <h3>Your Current Weaknesses</h3>
                 <ul id="weaknesses-display">
                     <!-- Weaknesses will be injected here by JavaScript -->
                 </ul>
             </div>
-            
             <hr>
-
             <h3>Get a Question</h3>
-            <!-- This button calls a function that is defined in the home.js file -->
-            <!-- Pass the subject name as a string -->
-            <button class="btn" onclick="getQuestion('maths')">Get a New Question</button>
+            <button class="btn subject-btn" onclick="getQuestion('maths')">Maths Question</button>
+            <button class="btn subject-btn" onclick="getQuestion('english')">English Question</button>
+            <button class="btn subject-btn" onclick="getQuestion('science')">Science Question</button>
             
             <div id="question-area" class="hidden">
                 <p id="question-text"></p>
                 <input type="text" id="answer-input" class="input-answer" placeholder="Type your answer here">
-                <!-- This button calls a function that is defined in the home.js file -->
                 <button class="btn" onclick="submitAnswer()">Submit Answer</button>
             </div>
         </div>
     </div>
 
-    <!-- Link the central JavaScript file -->
+    <!-- The public/script.js file should contain the client-side logic -->
+    <!-- Ensure the path is correct for your structure -->
     <script src="/resources/learn/home.js"></script>
-    -->
 </body>
 </html>
