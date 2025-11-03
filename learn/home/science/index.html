@@ -2,221 +2,55 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Basketball Physics Simulator (Single File)</title>
+    <title>3D Basketball Simulation</title>
     <style>
-        body {
-            font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f0f0f0;
-            margin: 0;
-            padding: 20px;
-        }
-
-        h1 {
-            color: #333;
-        }
-
-        .simulation-container {
-            background-color: white;
-            border: 2px solid #ccc;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        canvas {
-            border: 1px solid #000;
-            background-color: #cceeff;
-        }
-
-        .controls {
-            margin-top: 20px;
-        }
-
-        input[type="range"] {
-            width: 200px;
-        }
-
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            margin-top: 10px;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
+        body { margin: 0; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js';
 
-    <h1>Basketball Physics</h1>
-    <div class="simulation-container">
-        <canvas id="physicsCanvas" width="800" height="450"></canvas>
-        <div class="controls">
-            <label for="velocity">Launch Velocity:</label>
-            <input type="range" id="velocity" min="10" max="100" value="50">
-            <span id="velocityValue">50</span>
-            <br>
-            <label for="angle">Launch Angle:</label>
-            <input type="range" id="angle" min="10" max="80" value="45">
-            <span id="angleValue">45</span>
-            <br>
-            <button id="shootButton">Shoot Ball</button>
-        </div>
-    </div>
-    
-    <script>
-        // Set up the canvas and context
-        const canvas = document.getElementById('physicsCanvas');
-        const ctx = canvas.getContext('2d');
-        const gravity = 9.8; // m/s^2
+        // Set up the scene, camera, and renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-        // Ball properties
-        let ball = {
-            x: 50,
-            y: canvas.height - 20,
-            radius: 15,
-            color: 'orange',
-            vx: 0, // velocity x
-            vy: 0, // velocity y
-            isShot: false
-        };
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 1);
+        pointLight.position.set(5, 5, 5);
+        scene.add(pointLight);
 
-        // Hoop properties
-        const hoop = {
-            x: canvas.width - 150,
-            y: canvas.height - 150,
-            width: 60,
-            height: 10,
-            backboardX: canvas.width - 140,
-            backboardY: canvas.height - 200,
-            backboardWidth: 10,
-            backboardHeight: 50,
-            rimX: canvas.width - 130,
-            rimY: canvas.height - 150
-        };
+        // Create the floor (a large plane)
+        const floorGeometry = new THREE.PlaneGeometry(50, 50);
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x996633, side: THREE.DoubleSide });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = Math.PI / 2;
+        scene.add(floor);
 
-        // Controls
-        const velocitySlider = document.getElementById('velocity');
-        const angleSlider = document.getElementById('angle');
-        const shootButton = document.getElementById('shootButton');
-        const velocityValueSpan = document.getElementById('velocityValue');
-        const angleValueSpan = document.getElementById('angleValue');
+        // Create the basketball (a sphere)
+        const basketballGeometry = new THREE.SphereGeometry(1, 32, 16);
+        const basketballMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 });
+        const basketball = new THREE.Mesh(basketballGeometry, basketballMaterial);
+        basketball.position.y = 1;
+        scene.add(basketball);
 
-        // Update displayed slider values
-        velocitySlider.addEventListener('input', () => {
-            velocityValueSpan.textContent = velocitySlider.value;
-        });
-        angleSlider.addEventListener('input', () => {
-            angleValueSpan.textContent = angleSlider.value;
-        });
-
-        // Function to draw the ball
-        function drawBall() {
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fillStyle = ball.color;
-            ctx.fill();
-            ctx.closePath();
-        }
-
-        // Function to draw the hoop
-        function drawHoop() {
-            // Backboard
-            ctx.fillStyle = '#666';
-            ctx.fillRect(hoop.backboardX, hoop.backboardY, hoop.backboardWidth, hoop.backboardHeight);
-            // Rim
-            ctx.beginPath();
-            ctx.moveTo(hoop.rimX, hoop.rimY);
-            ctx.lineTo(hoop.rimX + hoop.width, hoop.rimY);
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = '#333';
-            ctx.stroke();
-            ctx.closePath();
-        }
-
-        // Function to reset the ball's position
-        function resetBall() {
-            ball.x = 50;
-            ball.y = canvas.height - 20;
-            ball.vx = 0;
-            ball.vy = 0;
-            ball.isShot = false;
-        }
-
-        // Function to handle the ball shooting
-        function shoot() {
-            if (!ball.isShot) {
-                resetBall();
-                ball.isShot = true;
-                const velocity = velocitySlider.value;
-                const angle = angleSlider.value * (Math.PI / 180); // Convert degrees to radians
-                ball.vx = velocity * Math.cos(angle);
-                ball.vy = -velocity * Math.sin(angle); // Invert y-axis for up motion
-            }
-        }
-
-        // Add event listener for the shoot button
-        shootButton.addEventListener('click', shoot);
+        // Position the camera
+        camera.position.z = 10;
+        camera.position.y = 5;
+        camera.lookAt(0, 0, 0);
 
         // Animation loop
         function animate() {
-            // Clear the canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw the court floor
-            ctx.fillStyle = '#996633';
-            ctx.fillRect(0, canvas.height - 10, canvas.width, 10);
-
-            // Draw the hoop
-            drawHoop();
-
-            if (ball.isShot) {
-                // Update ball's position
-                ball.vy += gravity * 0.05; // Apply gravity over time
-                ball.x += ball.vx * 0.1;
-                ball.y += ball.vy * 0.1;
-
-                // Simple collision detection with the ground
-                if (ball.y + ball.radius > canvas.height - 10) {
-                    // Stop the ball and reset
-                    ball.vy = 0;
-                    ball.vx = 0;
-                    setTimeout(resetBall, 2000); // Reset after 2 seconds
-                }
-
-                // Check for collision with the hoop
-                const hoopCollision = ball.x + ball.radius > hoop.rimX && 
-                                      ball.x - ball.radius < hoop.rimX + hoop.width &&
-                                      ball.y + ball.radius > hoop.rimY && 
-                                      ball.y - ball.radius < hoop.rimY + hoop.height;
-
-                // In a real simulation, you would need more complex collision and scoring logic
-                if (hoopCollision) {
-                    // Briefly pause or make it bounce off
-                    ball.vx = -ball.vx * 0.5; // Bounce off with damping
-                }
-            }
-            
-            // Draw the ball
-            drawBall();
-            
-            // Request next animation frame
             requestAnimationFrame(animate);
+            renderer.render(scene, camera);
         }
-
-        // Start the animation
         animate();
     </script>
-
 </body>
 </html>
