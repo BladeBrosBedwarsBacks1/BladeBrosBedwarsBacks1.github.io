@@ -25,7 +25,8 @@
 <body>
     <!-- The canvas element where the 3D scene will be rendered -->
     <canvas id="renderCanvas"></canvas>
-
+<!-- Add a physics engine library here -->
+<script src="https://cdn.babylonjs.com/cannon.js"></script> 
     <script>
         // Get the canvas element from the HTML
         const canvas = document.getElementById("renderCanvas");
@@ -56,6 +57,27 @@
 
             // Our built-in 'ground' shape
             const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 10, height: 10}, scene);
+            
+            // Inside createScene function:
+// Enable the physics engine with a gravity vector and the selected plugin
+scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
+
+// Add a physics impostor to the sphere (the ball)
+sphere.physicsImpostor = new BABYLON.PhysicsImpostor(
+    sphere, 
+    BABYLON.PhysicsImpostor.SphereImpostor, 
+    { mass: 1, restitution: 0.7 }, // Mass of 1 kg, restitution (bounciness) of 0.7
+    scene
+);
+
+// Add a physics impostor to the ground
+ground.physicsImpostor = new BABYLON.PhysicsImpostor(
+    ground, 
+    BABYLON.PhysicsImpostor.BoxImpostor, 
+    { mass: 0, restitution: 0.9 }, // Mass of 0 means it's static
+    scene
+);
+
             
             return scene;
         };
