@@ -2,55 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>3D Basketball Simulation</title>
+    <title>Babylon.js 3D Scene</title>
     <style>
-        body { margin: 0; }
-        canvas { display: block; }
+        /* Ensures the canvas takes up the full screen */
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            /* Disables default touch behavior on the canvas */
+            touch-action: none; 
+        }
     </style>
+    <!-- Import the Babylon.js library from a CDN -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
 </head>
 <body>
-    <script type="module">
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js';
+    <!-- The canvas element where the 3D scene will be rendered -->
+    <canvas id="renderCanvas"></canvas>
 
-        // Set up the scene, camera, and renderer
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+    <script>
+        // Get the canvas element from the HTML
+        const canvas = document.getElementById("renderCanvas");
+        // Initialize the Babylon.js engine
+        const engine = new BABYLON.Engine(canvas, true);
 
-        // Add lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-        scene.add(ambientLight);
-        const pointLight = new THREE.PointLight(0xffffff, 1);
-        pointLight.position.set(5, 5, 5);
-        scene.add(pointLight);
+        // Function to create the scene with objects and lights
+        const createScene = function () {
+            // Create a scene
+            const scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color3(0.8, 0.8, 0.8); // Light grey background
 
-        // Create the floor (a large plane)
-        const floorGeometry = new THREE.PlaneGeometry(50, 50);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x996633, side: THREE.DoubleSide });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = Math.PI / 2;
-        scene.add(floor);
+            // Create and position a free camera
+            const camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+            // Target the camera to the scene origin
+            camera.setTarget(BABYLON.Vector3.Zero());
+            // Attach the camera to the canvas for user interaction (mouse/touch controls)
+            camera.attachControl(canvas, true);
 
-        // Create the basketball (a sphere)
-        const basketballGeometry = new THREE.SphereGeometry(1, 32, 16);
-        const basketballMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 });
-        const basketball = new THREE.Mesh(basketballGeometry, basketballMaterial);
-        basketball.position.y = 1;
-        scene.add(basketball);
+            // Create a light, aiming 0,1,0 - to the sky
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.7; // Dim the light a small amount
 
-        // Position the camera
-        camera.position.z = 10;
-        camera.position.y = 5;
-        camera.lookAt(0, 0, 0);
+            // Our built-in 'sphere' shape (the basketball)
+            const sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {diameter: 2, segments: 32}, scene);
+            // Move the sphere upward 1/2 its height
+            sphere.position.y = 1;
 
-        // Animation loop
-        function animate() {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
-        }
-        animate();
+            // Our built-in 'ground' shape
+            const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 10, height: 10}, scene);
+            
+            return scene;
+        };
+
+        // Call the createScene function
+        const scene = createScene();
+
+        // Register a render loop to repeatedly render the scene at every frame
+        engine.runRenderLoop(function () {
+            scene.render();
+        });
+
+        // Watch for browser/canvas resize events
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
     </script>
 </body>
 </html>
